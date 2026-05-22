@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-cream font-sans text-ink antialiased;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Prevent iOS Safari zoom on input focus */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+@layer components {
+  .stamp {
+    @apply inline-block text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded;
+  }
+
+  .plate {
+    @apply inline-flex items-center gap-1 rounded border-2 border-ink/10 bg-white px-2 py-0.5 font-mono text-xs font-bold tracking-widest uppercase;
+  }
+}
+
+@layer utilities {
+  .tracking-carved {
+    letter-spacing: -0.04em;
+  }
+
+  .snap-x-mandatory {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .snap-start {
+    scroll-snap-align: start;
+  }
+}
+
+/* Leaflet overrides */
+.leaflet-container {
+  font-family: inherit;
+  border-radius: inherit;
+}
+
+/* Smooth scroll for category nav */
+.category-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.category-scroll::-webkit-scrollbar {
+  display: none;
+}
