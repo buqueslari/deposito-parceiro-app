@@ -366,7 +366,7 @@ async function startPolling() {
           track('payment_confirmed', { order_id: rawId, total: fresh?.total })
           if (typeof window.gtag === 'function') {
             window.gtag('event', 'conversion', {
-              send_to: 'AW-18181769409',
+              send_to: 'AW-18181769409/KFMxCIjZy7EcEMGR391D',
               value: fresh?.total ?? 0,
               currency: 'BRL',
               transaction_id: rawId,
