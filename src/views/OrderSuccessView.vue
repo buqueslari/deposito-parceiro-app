@@ -335,9 +335,6 @@ async function copyPix() {
     document.body.removeChild(ta)
   }
   copied.value = true
-  if (typeof window.gtag_report_conversion === 'function') {
-    window.gtag_report_conversion()
-  }
   setTimeout(() => { copied.value = false }, 2000)
 }
 
@@ -367,6 +364,14 @@ async function startPolling() {
           const fresh = await orderApi.get(rawId)
           order.value = fresh
           track('payment_confirmed', { order_id: rawId, total: fresh?.total })
+          if (typeof window.gtag === 'function') {
+            window.gtag('event', 'conversion', {
+              send_to: 'AW-18181769409',
+              value: fresh?.total ?? 0,
+              currency: 'BRL',
+              transaction_id: rawId,
+            })
+          }
         }
       }
     } catch { /* ignore */ }
