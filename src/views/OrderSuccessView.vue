@@ -346,6 +346,21 @@ function stopPolling() {
   if (timeoutHandle) { clearTimeout(timeoutHandle);  timeoutHandle = null }
 }
 
+function fireConversion(orderData) {
+  const key = `conv_fired_${orderData?.id ?? rawId}`
+  if (sessionStorage.getItem(key)) return
+  sessionStorage.setItem(key, '1')
+  track('payment_confirmed', { order_id: orderData?.id ?? rawId, total: orderData?.total })
+  if (typeof window.gtag === 'function') {
+    window.gtag('event', 'conversion', {
+      send_to: 'AW-18181769409/1eoICJ_O6LEcEMGR391D',
+      value: orderData?.total ?? 0,
+      currency: 'BRL',
+      transaction_id: orderData?.id ?? rawId,
+    })
+  }
+}
+
 async function startPolling() {
   timeoutHandle = setTimeout(() => {
     stopPolling()
@@ -363,15 +378,7 @@ async function startPolling() {
         if (isPaid || status === 'pago') {
           const fresh = await orderApi.get(rawId)
           order.value = fresh
-          track('payment_confirmed', { order_id: rawId, total: fresh?.total })
-          if (typeof window.gtag === 'function') {
-            window.gtag('event', 'conversion', {
-              send_to: 'AW-18181769409/1eoICJ_O6LEcEMGR391D',
-              value: fresh?.total ?? 0,
-              currency: 'BRL',
-              transaction_id: rawId,
-            })
-          }
+          fireConversion(fresh)
         }
       }
     } catch { /* ignore */ }
@@ -386,7 +393,9 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-  if (order.value && !order.value.paid && !TERMINAL_STATUSES.has(order.value?.status)) {
+  if (order.value?.paid || TERMINAL_STATUSES.has(order.value?.status)) {
+    fireConversion(order.value)
+  } else {
     startPolling()
   }
 })
