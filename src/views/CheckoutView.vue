@@ -259,6 +259,14 @@ async function placeOrder(draftPayment) {
       session_id:     sessionId.value,
     })
 
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'conversion', {
+        send_to: 'AW-18181769409/1eoICJ_O6LEcEMGR391D',
+        value: cart.total ?? 0,
+        currency: 'BRL',
+        transaction_id: result.id,
+      })
+    }
     cart.clear()
     router.push(`/pedido/${result.id}`)
   } catch (e) {
