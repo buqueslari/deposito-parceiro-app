@@ -350,6 +350,50 @@
               </div>
             </div>
 
+            <!-- PIX -->
+            <div class="bg-white rounded-2xl border border-black/[0.05] p-5">
+              <h2 class="font-extrabold text-[#1A1A1A] mb-1">Pagamento PIX</h2>
+              <p class="text-sm text-[#1A1A1A]/40 mb-4">Escolha como o PIX é gerado para os pedidos</p>
+
+              <!-- Toggle -->
+              <div class="flex gap-2 mb-4 p-1 bg-black/[0.04] rounded-xl">
+                <button
+                  @click="pixMode = 'api'"
+                  class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all"
+                  :class="pixMode === 'api' ? 'bg-[#0057B7] text-white shadow-sm' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'"
+                >
+                  API Blackcat
+                </button>
+                <button
+                  @click="pixMode = 'manual'"
+                  class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all"
+                  :class="pixMode === 'manual' ? 'bg-[#0057B7] text-white shadow-sm' : 'text-[#1A1A1A]/50 hover:text-[#1A1A1A]'"
+                >
+                  Chave Própria
+                </button>
+              </div>
+
+              <!-- Manual fields -->
+              <div v-if="pixMode === 'manual'" class="space-y-3">
+                <div>
+                  <label class="text-[11px] font-bold text-[#1A1A1A]/40 uppercase tracking-widest block mb-1.5">Chave PIX</label>
+                  <input v-model="settingsForm.pix_manual_key" type="text" class="input-field" placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" />
+                </div>
+                <div>
+                  <label class="text-[11px] font-bold text-[#1A1A1A]/40 uppercase tracking-widest block mb-1.5">Nome do Recebedor (aparece no QR Code)</label>
+                  <input v-model="settingsForm.pix_manual_name" type="text" class="input-field" placeholder="Seu Nome ou Empresa" />
+                </div>
+                <div class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+                  <p class="text-xs text-amber-700 font-semibold">Modo manual: confirme os pagamentos manualmente na aba Pedidos após o cliente pagar.</p>
+                </div>
+              </div>
+
+              <!-- API info -->
+              <div v-else class="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3">
+                <p class="text-xs text-blue-700 font-semibold">PIX gerado automaticamente via API Blackcat com confirmação automática de pagamento.</p>
+              </div>
+            </div>
+
             <div class="flex items-center gap-3">
               <button
                 @click="saveSettings"
@@ -507,6 +551,7 @@ const settingsForm   = ref({})
 const savingSettings = ref(false)
 const settingsSaved  = ref(false)
 const couponEnabled  = ref(true)
+const pixMode        = ref('api')
 
 let searchTimeout = null
 
@@ -609,9 +654,10 @@ async function loadSettings() {
   try {
     const res = await fetch('/api/admin/settings', { headers: authHeaders() })
     if (res.ok) {
-      settings.value     = await res.json()
-      settingsForm.value = { ...settings.value }
+      settings.value      = await res.json()
+      settingsForm.value  = { ...settings.value }
       couponEnabled.value = settings.value.coupon_enabled !== 'false'
+      pixMode.value       = settings.value.pix_mode || 'api'
     }
   } catch { /* ignore */ }
 }
@@ -619,7 +665,7 @@ async function loadSettings() {
 async function saveSettings() {
   savingSettings.value = true
   try {
-    const payload = { ...settingsForm.value, coupon_enabled: String(couponEnabled.value) }
+    const payload = { ...settingsForm.value, coupon_enabled: String(couponEnabled.value), pix_mode: pixMode.value }
     const res = await fetch('/api/admin/settings', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(payload) })
     if (res.ok) {
       settings.value = { ...payload }

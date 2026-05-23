@@ -91,6 +91,35 @@ function isTableMissing(err) {
   return err && (err.code === 'PGRST205' || (err.message || '').includes('does not exist'))
 }
 
+// ─── PIX BR Code generator (BACEN EMV spec) ──────────────────────────────────
+
+function crc16ccitt(str) {
+  let crc = 0xFFFF
+  for (let i = 0; i < str.length; i++) {
+    crc ^= str.charCodeAt(i) << 8
+    for (let j = 0; j < 8; j++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1)
+  }
+  return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0')
+}
+
+function pf(id, value) { return `${id}${String(value.length).padStart(2, '0')}${value}` }
+
+function buildPixBRCode(key, amountReais, txId, recipientName, city) {
+  const normalize = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9 ]/g, ' ').trim()
+  const mai  = pf('00', 'BR.GOV.BCB.PIX') + pf('01', key.trim())
+  const txid = (txId || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 25) || 'pedido'
+  let payload = '000201' + '010212'
+  payload += pf('26', mai)
+  payload += '52040000' + '5303986'
+  if (amountReais > 0) payload += pf('54', amountReais.toFixed(2))
+  payload += '5802BR'
+  payload += pf('59', normalize(recipientName).substring(0, 25))
+  payload += pf('60', normalize(city || 'SAO PAULO').substring(0, 15))
+  payload += pf('62', pf('05', txid))
+  payload += '6304'
+  return payload + crc16ccitt(payload)
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function blackcatFetch(path, options = {}) {
@@ -146,31 +175,45 @@ app.post('/api/v1/pedidos', async (req, res) => {
     const totalCents = Math.round(totalReais * 100)
     if (totalCents < 4000) return res.status(400).json({ message: 'Pedido mínimo de R$ 40,00.' })
 
-    const bcRes = await blackcatFetch('/api/sales/create-sale', {
-      method: 'POST',
-      body: JSON.stringify({
-        amount: totalCents, paymentMethod: 'PIX',
-        customer: { name: customer.nome || 'Cliente', email: customer.email || 'cliente@depositoparceiro.online', phone: (customer.telefone || '').replace(/\D/g, ''), document: { number: (customer.cpf || '').replace(/\D/g, ''), type: 'cpf' } },
-        items: items.map(i => ({ title: i.nome || i.name || 'Produto', quantity: i.qty || i.qtd || 1, unitPrice: Math.round((i.price || 0) * 100), tangible: false })),
-      }),
-    })
-
-    const transactionId = bcRes?.data?.transactionId || bcRes?.transactionId
-    const pixCode       = bcRes?.data?.paymentData?.copyPaste || bcRes?.data?.paymentData?.qrCode || null
-    const pixBase64     = bcRes?.data?.paymentData?.qrCodeBase64 || null
-    if (!transactionId) return res.status(502).json({ message: 'Falha ao gerar cobrança PIX.' })
+    // Read pix_mode from settings
+    const { data: settingsRows } = await db.from('settings').select('key, value')
+    const cfg = {}; (settingsRows || []).forEach(r => { cfg[r.key] = r.value })
+    const pixMode = cfg.pix_mode || 'api'
 
     const orderId = randomUUID()
-    const order = { id: orderId, transaction_id: transactionId, status: 'aguardando_pagamento', paid: false, total: totalReais, total_cents: totalCents, customer, address, notes: notes || null, items, payment: { method: 'pix', pix_code: pixCode, pix_base64: pixBase64 } }
+    let transactionId, pixCode, pixBase64, paymentMode
+
+    if (pixMode === 'manual') {
+      const pixKey  = cfg.pix_manual_key || ''
+      const pixName = cfg.pix_manual_name || cfg.store_name || 'Deposito Parceiro'
+      const pixCity = (cfg.store_city || 'SAO PAULO').split('·')[0].trim()
+      if (!pixKey) return res.status(400).json({ message: 'Chave PIX não configurada. Configure no painel admin.' })
+      transactionId = orderId
+      pixCode       = buildPixBRCode(pixKey, totalReais, orderId, pixName, pixCity)
+      pixBase64     = null
+      paymentMode   = 'manual'
+    } else {
+      const bcRes = await blackcatFetch('/api/sales/create-sale', {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: totalCents, paymentMethod: 'PIX',
+          customer: { name: customer.nome || 'Cliente', email: customer.email || 'cliente@depositoparceiro.online', phone: (customer.telefone || '').replace(/\D/g, ''), document: { number: (customer.cpf || '').replace(/\D/g, ''), type: 'cpf' } },
+          items: items.map(i => ({ title: i.nome || i.name || 'Produto', quantity: i.qty || i.qtd || 1, unitPrice: Math.round((i.price || 0) * 100), tangible: false })),
+        }),
+      })
+      transactionId = bcRes?.data?.transactionId || bcRes?.transactionId
+      pixCode       = bcRes?.data?.paymentData?.copyPaste || bcRes?.data?.paymentData?.qrCode || null
+      pixBase64     = bcRes?.data?.paymentData?.qrCodeBase64 || null
+      paymentMode   = 'api'
+      if (!transactionId) return res.status(502).json({ message: 'Falha ao gerar cobrança PIX.' })
+    }
+
+    const order = { id: orderId, transaction_id: transactionId, status: 'aguardando_pagamento', paid: false, total: totalReais, total_cents: totalCents, customer, address, notes: notes || null, items, payment: { method: 'pix', mode: paymentMode, pix_code: pixCode, pix_base64: pixBase64 } }
 
     let { error: dbErr } = await db.from('orders').insert(order)
-    if (isTableMissing(dbErr)) {
-      const fallback = localOrders.insert(order)
-      dbErr = fallback.error
-    }
+    if (isTableMissing(dbErr)) { const fb = localOrders.insert(order); dbErr = fb.error }
     if (dbErr) return res.status(500).json({ message: 'Erro ao salvar pedido.' })
 
-    // Track pix_generated event
     if (session_id) db.from('events').insert({ session_id, event: 'pix_generated', metadata: { order_id: orderId, total: totalReais } }).then(() => {}).catch(() => {})
 
     return res.status(201).json({ id: orderId, status: order.status, total: totalReais, payment: order.payment })
@@ -190,9 +233,11 @@ app.get('/api/v1/pedidos/:id', async (req, res) => {
 
 // Poll order status
 app.get('/api/v1/pedidos/:id/status', async (req, res) => {
-  let { data: order, error: orderErr } = await db.from('orders').select('id, transaction_id, status').eq('id', req.params.id).single()
+  let { data: order, error: orderErr } = await db.from('orders').select('id, transaction_id, status, payment').eq('id', req.params.id).single()
   if (isTableMissing(orderErr)) { const fb = localOrders.findById(req.params.id); order = fb.data }
   if (!order) return res.status(404).json({ message: 'Pedido não encontrado.' })
+  // Manual PIX: confirmation is done by admin, just return current DB status
+  if (order.payment?.mode === 'manual') return res.json({ status: order.status })
   try {
     const bcRes  = await blackcatFetch(`/api/sales/${order.transaction_id}/status`)
     const normalized = normalizeStatus(bcRes?.data?.status || bcRes?.status)
