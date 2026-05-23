@@ -354,8 +354,13 @@
             <div class="bg-white rounded-2xl border border-black/[0.05] p-5">
               <h2 class="font-extrabold text-[#1A1A1A] mb-1">Notificações no Celular</h2>
               <p class="text-sm text-[#1A1A1A]/40 mb-4">Receba alertas de novo pedido e pagamento confirmado neste dispositivo</p>
-              <div v-if="pushStatus === 'unsupported'" class="rounded-xl bg-red-50 border border-red-100 px-4 py-3">
-                <p class="text-xs text-red-600 font-semibold">Seu navegador não suporta notificações push. Use Chrome ou Safari no celular.</p>
+              <div v-if="pushStatus === 'unsupported'" class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 space-y-1.5">
+                <p class="text-xs font-extrabold text-amber-800">Siga estes passos no iPhone:</p>
+                <p class="text-xs text-amber-700">1. Abra este link no <strong>Safari</strong></p>
+                <p class="text-xs text-amber-700">2. Toque em <strong>Compartilhar</strong> (ícone de caixa com seta)</p>
+                <p class="text-xs text-amber-700">3. Toque em <strong>"Adicionar à Tela de Início"</strong></p>
+                <p class="text-xs text-amber-700">4. Abra o ícone que apareceu na tela inicial</p>
+                <p class="text-xs text-amber-700">5. Volte aqui em Configurações e ative as notificações</p>
               </div>
               <div v-else-if="pushStatus === 'subscribed'" class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2.5">
@@ -680,6 +685,9 @@ async function loadOrders() {
 }
 
 async function checkPushStatus() {
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  const isStandalone = window.navigator.standalone === true
+  if (isIOS && !isStandalone) { pushStatus.value = 'unsupported'; return }
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     pushStatus.value = 'unsupported'; return
   }

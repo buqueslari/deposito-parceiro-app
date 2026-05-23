@@ -1,0 +1,14 @@
+{
+  "name": "Depósito Parceiro Admin",
+  "short_name": "DP Admin",
+  "description": "Painel administrativo do Depósito Parceiro",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#0057B7",
+  "theme_color": "#0057B7",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/logo.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/logo.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
