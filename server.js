@@ -3,6 +3,7 @@ import cors from 'cors'
 import { randomUUID } from 'crypto'
 import { createClient } from '@supabase/supabase-js'
 import jwt from 'jsonwebtoken'
+import webpush from 'web-push'
 import 'dotenv/config'
 import fs from 'fs'
 import path from 'path'
@@ -22,6 +23,12 @@ const SUPABASE_URL     = process.env.SUPABASE_URL
 const SUPABASE_KEY     = process.env.SUPABASE_SERVICE_ROLE_KEY
 const ADMIN_PASSWORD   = process.env.ADMIN_PASSWORD   || 'Deposito@2025'
 const JWT_SECRET       = process.env.ADMIN_JWT_SECRET || 'dp-secret'
+const VAPID_PUBLIC     = process.env.VAPID_PUBLIC_KEY  || ''
+const VAPID_PRIVATE    = process.env.VAPID_PRIVATE_KEY || ''
+
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webpush.setVapidDetails('mailto:admin@depositoparceiro.online', VAPID_PUBLIC, VAPID_PRIVATE)
+}
 
 const db = createClient(SUPABASE_URL, SUPABASE_KEY)
 
@@ -216,6 +223,9 @@ app.post('/api/v1/pedidos', async (req, res) => {
 
     if (session_id) db.from('events').insert({ session_id, event: 'pix_generated', metadata: { order_id: orderId, total: totalReais } }).then(() => {}).catch(() => {})
 
+    const fmtBRL = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+    sendPush({ title: '🛒 Novo pedido!', body: `${customer.nome || 'Cliente'} gerou PIX de ${fmtBRL(totalReais)}`, tag: `order-${orderId}`, url: '/admin' }).catch(() => {})
+
     return res.status(201).json({ id: orderId, status: order.status, total: totalReais, payment: order.payment })
   } catch (err) {
     console.error('POST /api/v1/pedidos error:', err)
@@ -244,6 +254,9 @@ app.get('/api/v1/pedidos/:id/status', async (req, res) => {
     const patch = { status: normalized, paid: normalized === 'pago' }
     const { error: upErr } = await db.from('orders').update(patch).eq('id', order.id)
     if (isTableMissing(upErr)) localOrders.updateById(order.id, patch)
+    if (normalized === 'pago') {
+      sendPush({ title: '✅ Pagamento confirmado!', body: `Pedido #${order.id.slice(0,8)} foi pago.`, tag: `paid-${order.id}`, url: '/admin' }).catch(() => {})
+    }
     return res.json({ status: normalized })
   } catch { return res.json({ status: order.status }) }
 })
@@ -272,6 +285,49 @@ app.get('/api/v1/geocode/cep/:cep', async (req, res) => {
 // Storefront
 app.get('/api/v1/storefront/location', (_req, res) => {
   return res.json({ available: true, distanceKm: 2.1, deliveryFee: 0, minOrder: 40, etaMinutes: { min: 20, max: 35 } })
+})
+
+// ─── Push Notifications ───────────────────────────────────────────────────────
+
+async function sendPush(payload) {
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return
+  const { data } = await db.from('settings').select('value').eq('key', 'push_subscriptions').single()
+  if (!data?.value) return
+  let subs = []
+  try { subs = JSON.parse(data.value) } catch { return }
+  const results = await Promise.allSettled(
+    subs.map(sub => webpush.sendNotification(sub, JSON.stringify(payload)))
+  )
+  // Remove expired/invalid subscriptions
+  const valid = subs.filter((_, i) => results[i].status === 'fulfilled')
+  if (valid.length !== subs.length) {
+    await db.from('settings').upsert({ key: 'push_subscriptions', value: JSON.stringify(valid) }, { onConflict: 'key' })
+  }
+}
+
+app.get('/api/admin/push/vapid-public-key', requireAdmin, (_req, res) => {
+  res.json({ key: VAPID_PUBLIC })
+})
+
+app.post('/api/admin/push/subscribe', requireAdmin, async (req, res) => {
+  const sub = req.body
+  if (!sub?.endpoint) return res.status(400).json({ message: 'Subscription inválida.' })
+  const { data } = await db.from('settings').select('value').eq('key', 'push_subscriptions').single()
+  let subs = []
+  try { subs = JSON.parse(data?.value || '[]') } catch { subs = [] }
+  if (!subs.find(s => s.endpoint === sub.endpoint)) subs.push(sub)
+  await db.from('settings').upsert({ key: 'push_subscriptions', value: JSON.stringify(subs) }, { onConflict: 'key' })
+  res.json({ ok: true })
+})
+
+app.post('/api/admin/push/unsubscribe', requireAdmin, async (req, res) => {
+  const { endpoint } = req.body || {}
+  const { data } = await db.from('settings').select('value').eq('key', 'push_subscriptions').single()
+  let subs = []
+  try { subs = JSON.parse(data?.value || '[]') } catch { subs = [] }
+  subs = subs.filter(s => s.endpoint !== endpoint)
+  await db.from('settings').upsert({ key: 'push_subscriptions', value: JSON.stringify(subs) }, { onConflict: 'key' })
+  res.json({ ok: true })
 })
 
 // ─── Admin Routes ─────────────────────────────────────────────────────────────
@@ -362,6 +418,7 @@ app.patch('/api/admin/pedidos/:id/status', requireAdmin, async (req, res) => {
   let { data, error } = await db.from('orders').update({ status, paid: isPaid }).eq('id', req.params.id).select().single()
   if (isTableMissing(error)) { const fb = localOrders.updateById(req.params.id, { status, paid: isPaid }); data = fb.data; error = fb.error }
   if (error) return res.status(500).json({ message: error.message })
+  if (status === 'pago') sendPush({ title: '✅ Pagamento confirmado!', body: `Pedido #${req.params.id.slice(0,8)} marcado como pago.`, tag: `paid-${req.params.id}`, url: '/admin' }).catch(() => {})
   return res.json(data)
 })
 

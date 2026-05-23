@@ -350,6 +350,32 @@
               </div>
             </div>
 
+            <!-- Notificações Push -->
+            <div class="bg-white rounded-2xl border border-black/[0.05] p-5">
+              <h2 class="font-extrabold text-[#1A1A1A] mb-1">Notificações no Celular</h2>
+              <p class="text-sm text-[#1A1A1A]/40 mb-4">Receba alertas de novo pedido e pagamento confirmado neste dispositivo</p>
+              <div v-if="pushStatus === 'unsupported'" class="rounded-xl bg-red-50 border border-red-100 px-4 py-3">
+                <p class="text-xs text-red-600 font-semibold">Seu navegador não suporta notificações push. Use Chrome ou Safari no celular.</p>
+              </div>
+              <div v-else-if="pushStatus === 'subscribed'" class="flex items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-2.5 h-2.5 rounded-full bg-[#15803D] flex-shrink-0"></div>
+                  <p class="text-sm font-semibold text-[#1A1A1A]">Notificações ativas neste dispositivo</p>
+                </div>
+                <button @click="unsubscribePush" class="text-xs text-red-500 font-bold hover:underline">Desativar</button>
+              </div>
+              <button
+                v-else
+                @click="subscribePush"
+                :disabled="pushLoading"
+                class="w-full flex items-center justify-center gap-2 bg-[#15803D] text-white font-bold py-3 rounded-xl text-sm hover:bg-[#166534] active:scale-[0.98] transition-all disabled:opacity-60"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                {{ pushLoading ? 'Ativando...' : 'Ativar notificações neste dispositivo' }}
+              </button>
+              <p v-if="pushError" class="text-xs text-red-500 font-semibold mt-2">{{ pushError }}</p>
+            </div>
+
             <!-- PIX -->
             <div class="bg-white rounded-2xl border border-black/[0.05] p-5">
               <h2 class="font-extrabold text-[#1A1A1A] mb-1">Pagamento PIX</h2>
@@ -552,6 +578,9 @@ const savingSettings = ref(false)
 const settingsSaved  = ref(false)
 const couponEnabled  = ref(true)
 const pixMode        = ref('api')
+const pushStatus     = ref('idle') // idle | subscribed | unsupported
+const pushLoading    = ref(false)
+const pushError      = ref('')
 
 let searchTimeout = null
 
@@ -650,6 +679,47 @@ async function loadOrders() {
   } finally { ordersLoading.value = false }
 }
 
+async function checkPushStatus() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    pushStatus.value = 'unsupported'; return
+  }
+  const reg = await navigator.serviceWorker.ready
+  const sub = await reg.pushManager.getSubscription()
+  pushStatus.value = sub ? 'subscribed' : 'idle'
+}
+
+async function subscribePush() {
+  pushError.value = ''
+  pushLoading.value = true
+  try {
+    const perm = await Notification.requestPermission()
+    if (perm !== 'granted') { pushError.value = 'Permissão negada. Habilite nas configurações do navegador.'; return }
+    const res  = await fetch('/api/admin/push/vapid-public-key', { headers: authHeaders() })
+    const { key } = await res.json()
+    const reg  = await navigator.serviceWorker.ready
+    const sub  = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: key,
+    })
+    await fetch('/api/admin/push/subscribe', { method: 'POST', headers: authHeaders(), body: JSON.stringify(sub) })
+    pushStatus.value = 'subscribed'
+  } catch (e) {
+    pushError.value = e.message || 'Erro ao ativar notificações.'
+  } finally {
+    pushLoading.value = false
+  }
+}
+
+async function unsubscribePush() {
+  const reg = await navigator.serviceWorker.ready
+  const sub = await reg.pushManager.getSubscription()
+  if (sub) {
+    await fetch('/api/admin/push/unsubscribe', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ endpoint: sub.endpoint }) })
+    await sub.unsubscribe()
+  }
+  pushStatus.value = 'idle'
+}
+
 async function loadSettings() {
   try {
     const res = await fetch('/api/admin/settings', { headers: authHeaders() })
@@ -734,6 +804,9 @@ onMounted(async () => {
   if (!token()) { router.push('/admin/login'); return }
   await Promise.all([loadStats(), loadRecentOrders(), loadSettings()])
   pollInterval = setInterval(() => { loadStats(); if (activeTab.value === 'orders') loadOrders(); else loadRecentOrders() }, 30_000)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(() => checkPushStatus()).catch(() => {})
+  }
 })
 
 onUnmounted(() => { if (pollInterval) clearInterval(pollInterval) })

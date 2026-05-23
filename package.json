@@ -20,7 +20,8 @@
     "qrcode.vue": "^3.9.0",
     "sweetalert2": "^11.14.5",
     "vue": "^3.5.13",
-    "vue-router": "^4.5.0"
+    "vue-router": "^4.5.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.4",
