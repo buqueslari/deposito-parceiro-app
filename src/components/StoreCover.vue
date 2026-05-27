@@ -4,7 +4,7 @@
     <div class="relative h-36 sm:h-52 lg:h-60 -mx-4 sm:mx-0 sm:mt-4 sm:rounded-2xl overflow-hidden bg-gradient-to-br from-action via-action-deep to-blue-900">
       <img
         src="/cover.png"
-        alt="Depósito Parceiro"
+        :alt="settings.store_name"
         class="w-full h-full object-cover object-center"
       />
       <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
@@ -16,7 +16,7 @@
             <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
             <span class="relative inline-flex rounded-full h-2 w-2 bg-white" />
           </span>
-          Aberto 24 horas
+          {{ settings.store_hours || 'Aberto 24 horas' }}
         </span>
       </div>
     </div>
@@ -35,7 +35,7 @@
           <div class="flex-1 min-w-0 pt-1">
             <!-- Name + verified badge -->
             <h1 class="font-extrabold text-ink text-xl sm:text-2xl leading-tight tracking-carved flex items-center gap-1.5">
-              <span>Depósito Parceiro</span>
+              <span>{{ settings.store_name }}</span>
               <VerifiedStoreBadge class="w-5 h-5 sm:w-6 sm:h-6 shrink-0" />
             </h1>
 
@@ -127,11 +127,13 @@
 <script setup>
 import { ref, computed } from 'vue'
 import VerifiedStoreBadge from '@/components/VerifiedStoreBadge.vue'
+import { DEFAULT_STOREFRONT_SETTINGS } from '@/stores/storefrontSettings'
 
 const props = defineProps({
   confirmedAddress: { type: Object, default: null },
   detectedCity:     { type: String, default: '' },
   detectedState:    { type: String, default: '' },
+  settings:         { type: Object, default: () => DEFAULT_STOREFRONT_SETTINGS },
 })
 
 const pickupTooltipVisible = ref(false)

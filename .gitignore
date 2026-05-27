@@ -4,3 +4,5 @@ dist/
 data/orders.json
 *.log
 .DS_Store
+
+.vercel

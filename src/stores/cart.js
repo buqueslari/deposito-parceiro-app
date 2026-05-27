@@ -97,5 +97,18 @@ export const useCartStore = defineStore('cart', () => {
     return items.value.find(i => i.productId === productId)?.qty ?? 0
   }
 
-  return { items, notes, couponApplied, savedAddress, totalQty, subtotal, couponDiscount, deliveryFee, total, meetsMinimum, add, remove, setQty, clear, applyCoupon, setNotes, setAddress, getQty }
+  function syncProducts(products) {
+    if (!Array.isArray(products) || !items.value.length) return
+    const byId = new Map(products.map(product => [product.id, product]))
+    let changed = false
+    items.value = items.value.map(item => {
+      const product = byId.get(item.productId)
+      if (!product) return item
+      changed = changed || item.price !== product.price || item.name !== product.name || item.image !== product.image
+      return { ...item, name: product.name, price: product.price, image: product.image, maxQty: product.maxQty ?? item.maxQty }
+    })
+    if (changed) save(items.value)
+  }
+
+  return { items, notes, couponApplied, savedAddress, totalQty, subtotal, couponDiscount, deliveryFee, total, meetsMinimum, add, remove, setQty, clear, applyCoupon, setNotes, setAddress, getQty, syncProducts }
 })

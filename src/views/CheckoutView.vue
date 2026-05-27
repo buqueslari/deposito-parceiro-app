@@ -253,6 +253,7 @@ async function placeOrder(draftPayment) {
         referencia:  address.value.referencia || null,
       },
       notes:          cart.notes || null,
+      payment:        draftPayment || { method: 'pix' },
       total:          cart.total,
       couponApplied:  couponApplied.value,
       couponDiscount: cart.couponDiscount,

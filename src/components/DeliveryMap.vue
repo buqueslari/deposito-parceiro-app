@@ -16,7 +16,7 @@ import 'leaflet/dist/leaflet.css'
 
 const props = defineProps({
   address: { type: Object, default: null },
-  storeLabel: { type: String, default: 'Depósito Parceiro' },
+  storeLabel: { type: String, default: 'Depósito Mais Barato' },
   customerLabel: { type: String, default: 'Seu endereço' },
   storeDistanceKm: { type: Number, default: 2.1 },
   customerOnly: { type: Boolean, default: false },
@@ -32,7 +32,7 @@ let storeMarker = null
 let customerMarker = null
 let routeLine = null
 
-// Fixed store location — Depósito Parceiro HQ
+// Fixed store location — Depósito Mais Barato HQ
 const STORE_COORDS = { lat: -23.5489, lng: -46.6388 }
 const SP_FALLBACK = { lat: -23.55, lng: -46.64 }
 

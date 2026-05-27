@@ -1,7 +1,7 @@
 {
-  "name": "Depósito Parceiro Admin",
-  "short_name": "DP Admin",
-  "description": "Painel administrativo do Depósito Parceiro",
+  "name": "Depósito Mais Barato Admin",
+  "short_name": "DMB Admin",
+  "description": "Painel administrativo do Depósito Mais Barato",
   "start_url": "/admin",
   "display": "standalone",
   "background_color": "#0057B7",

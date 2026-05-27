@@ -49,6 +49,19 @@
               </p>
             </div>
           </div>
+
+          <button
+            @click="sendPaymentProof"
+            class="w-full bg-[#008A00] text-white font-bold py-4 rounded-2xl text-base shadow-cta hover:bg-[#007A00] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+              <path d="M16.02 3C8.86 3 3.04 8.7 3.04 15.72c0 2.4.68 4.74 1.98 6.76L3 29l6.72-1.96a13.26 13.26 0 0 0 6.3 1.59C23.18 28.63 29 22.93 29 15.9S23.18 3 16.02 3Zm0 23.45c-1.93 0-3.82-.52-5.47-1.5l-.39-.23-3.98 1.16 1.18-3.82-.25-.4a10.46 10.46 0 0 1-1.66-5.94c0-5.82 4.74-10.55 10.57-10.55s10.57 4.73 10.57 10.55-4.74 10.73-10.57 10.73Zm5.8-7.9c-.32-.16-1.88-.91-2.17-1.02-.29-.1-.5-.16-.71.16-.21.31-.82 1.01-1 1.22-.19.2-.37.23-.69.08-.32-.16-1.34-.49-2.56-1.55-.94-.83-1.58-1.86-1.77-2.18-.18-.31-.02-.48.14-.64.14-.14.32-.37.48-.55.16-.19.21-.32.32-.53.1-.2.05-.39-.03-.55-.08-.16-.71-1.68-.98-2.3-.26-.6-.52-.52-.71-.53h-.61c-.21 0-.55.08-.84.39-.29.31-1.1 1.06-1.1 2.58s1.13 3 1.29 3.2c.16.21 2.22 3.33 5.38 4.67.75.32 1.34.51 1.8.65.76.23 1.45.2 1.99.12.61-.09 1.88-.75 2.14-1.48.27-.73.27-1.35.19-1.48-.08-.13-.29-.2-.61-.36Z"/>
+            </svg>
+            Enviar comprovante pelo WhatsApp
+          </button>
+          <p class="text-xs text-center text-ink/40 mt-2">
+            Depois de pagar, toque aqui e anexe o comprovante na conversa.
+          </p>
         </div>
 
         <!-- PIX Payment card -->
@@ -115,6 +128,61 @@
               Confirmação demorando mais que o esperado. Entre em contato se já pagou.
             </div>
           </div>
+
+          <button
+            @click="sendPaymentProof"
+            class="w-full bg-[#008A00] text-white font-bold py-4 rounded-2xl text-base shadow-cta hover:bg-[#007A00] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          >
+            <svg class="w-5 h-5" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+              <path d="M16.02 3C8.86 3 3.04 8.7 3.04 15.72c0 2.4.68 4.74 1.98 6.76L3 29l6.72-1.96a13.26 13.26 0 0 0 6.3 1.59C23.18 28.63 29 22.93 29 15.9S23.18 3 16.02 3Zm0 23.45c-1.93 0-3.82-.52-5.47-1.5l-.39-.23-3.98 1.16 1.18-3.82-.25-.4a10.46 10.46 0 0 1-1.66-5.94c0-5.82 4.74-10.55 10.57-10.55s10.57 4.73 10.57 10.55-4.74 10.73-10.57 10.73Zm5.8-7.9c-.32-.16-1.88-.91-2.17-1.02-.29-.1-.5-.16-.71.16-.21.31-.82 1.01-1 1.22-.19.2-.37.23-.69.08-.32-.16-1.34-.49-2.56-1.55-.94-.83-1.58-1.86-1.77-2.18-.18-.31-.02-.48.14-.64.14-.14.32-.37.48-.55.16-.19.21-.32.32-.53.1-.2.05-.39-.03-.55-.08-.16-.71-1.68-.98-2.3-.26-.6-.52-.52-.71-.53h-.61c-.21 0-.55.08-.84.39-.29.31-1.1 1.06-1.1 2.58s1.13 3 1.29 3.2c.16.21 2.22 3.33 5.38 4.67.75.32 1.34.51 1.8.65.76.23 1.45.2 1.99.12.61-.09 1.88-.75 2.14-1.48.27-.73.27-1.35.19-1.48-.08-.13-.29-.2-.61-.36Z"/>
+            </svg>
+            Enviar comprovante pelo WhatsApp
+          </button>
+          <p class="text-xs text-center text-ink/40 mt-2">
+            Depois de pagar, toque aqui e anexe o comprovante na conversa.
+          </p>
+        </div>
+
+        <div v-else-if="order.status === 'pagamento_recusado'" class="bg-white rounded-2xl shadow-card border border-red-200 p-5">
+          <h1 class="text-2xl font-extrabold text-ink text-center leading-tight mb-2">
+            Pagamento recusado
+          </h1>
+          <p class="text-sm text-center text-ink/55 mb-5">
+            Pedido <strong>#{{ orderId }}</strong> · Total {{ fmt(order.total) }}
+          </p>
+          <div class="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+            <p class="text-sm font-semibold text-red-700">
+              Nao foi possivel aprovar o pagamento. Tente novamente ou fale com a loja pelo WhatsApp.
+            </p>
+          </div>
+        </div>
+
+        <div v-else-if="isCreditCardOrder && !order.paid && order.status !== 'pago'" class="bg-white rounded-2xl shadow-card border border-ink/[0.06] p-5">
+          <h1 class="text-2xl font-extrabold text-ink text-center leading-tight mb-2">
+            Pagamento no cartao em processamento
+          </h1>
+          <p class="text-sm text-center text-ink/55 mb-5">
+            Pedido <strong>#{{ orderId }}</strong> · Total {{ fmt(order.total) }}
+          </p>
+
+          <div class="rounded-xl bg-action/[0.07] border border-action/20 px-4 py-3 flex items-start gap-2.5 mb-4">
+            <svg class="w-4 h-4 text-action flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+            </svg>
+            <p class="text-sm font-semibold text-action">
+              Estamos aguardando a confirmacao da operadora. Esta tela atualiza automaticamente.
+            </p>
+          </div>
+
+          <a
+            v-if="paymentUrl"
+            :href="paymentUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="w-full bg-action text-white font-bold py-4 rounded-2xl text-base shadow-cta hover:bg-action-deep active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+          >
+            Abrir pagamento do cartao
+          </a>
         </div>
 
         <!-- Tracking card -->
@@ -234,6 +302,7 @@ import { orderApi } from '@/api'
 import DeliveryMap from '@/components/DeliveryMap.vue'
 import AppFooter from '@/components/AppFooter.vue'
 import { useTracking } from '@/composables/useTracking'
+import { openPaymentProofWhatsApp } from '@/lib/whatsapp'
 
 const route = useRoute()
 const rawId = route.params.id || ''
@@ -297,7 +366,7 @@ const STATUS_LABELS = {
   cancelado:            'Pedido cancelado.',
 }
 
-const TERMINAL_STATUSES = new Set(['pago', 'entregue', 'cancelado'])
+const TERMINAL_STATUSES = new Set(['pago', 'pagamento_recusado', 'entregue', 'cancelado'])
 
 const statusLabel = computed(() =>
   STATUS_LABELS[order.value?.status] ?? 'Atualizando status…'
@@ -317,6 +386,8 @@ const progressWidth = computed(() => {
 })
 
 const pixCode = computed(() => order.value?.payment?.pix_code ?? null)
+const isCreditCardOrder = computed(() => order.value?.payment?.method === 'credit_card')
+const paymentUrl = computed(() => order.value?.payment?.payment_url ?? null)
 
 function fmt(val) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val ?? 0)
@@ -348,6 +419,11 @@ function stopPolling() {
 
 function fireConversion(orderData) {
   track('payment_confirmed', { order_id: orderData?.id ?? rawId, total: orderData?.total })
+}
+
+function sendPaymentProof() {
+  track('whatsapp_payment_proof', { order_id: order.value?.id ?? rawId, total: order.value?.total })
+  openPaymentProofWhatsApp(order.value, orderId.value)
 }
 
 async function startPolling() {

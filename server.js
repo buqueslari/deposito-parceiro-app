@@ -8,6 +8,7 @@ import 'dotenv/config'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { PRODUCTS } from './src/data/products.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -31,6 +32,44 @@ if (VAPID_PUBLIC && VAPID_PRIVATE) {
 }
 
 const db = createClient(SUPABASE_URL, SUPABASE_KEY)
+
+function parseJson(value, fallback) {
+  try { return JSON.parse(value || '') } catch { return fallback }
+}
+
+async function loadSettingsObject() {
+  const { data, error } = await db.from('settings').select('key, value')
+  if (error) return {}
+  const cfg = {}
+  ;(data || []).forEach(row => { cfg[row.key] = row.value })
+  return cfg
+}
+
+function normalizeProductOverrides(value) {
+  const raw = Array.isArray(value) ? value : parseJson(value, [])
+  return raw
+    .filter(item => item && typeof item.id === 'string')
+    .map(item => ({
+      id: item.id,
+      price: Number(item.price),
+      oldPrice: item.oldPrice === '' || item.oldPrice == null ? null : Number(item.oldPrice),
+      maxQty: item.maxQty === '' || item.maxQty == null ? undefined : Number(item.maxQty),
+    }))
+    .filter(item => Number.isFinite(item.price) && item.price >= 0)
+}
+
+function buildProducts(overridesValue) {
+  const overrides = new Map(normalizeProductOverrides(overridesValue).map(item => [item.id, item]))
+  return PRODUCTS.map(product => {
+    const override = overrides.get(product.id)
+    if (!override) return product
+    const next = { ...product, price: override.price }
+    if (override.oldPrice === null) delete next.oldPrice
+    else if (Number.isFinite(override.oldPrice) && override.oldPrice >= 0) next.oldPrice = override.oldPrice
+    if (Number.isFinite(override.maxQty) && override.maxQty > 0) next.maxQty = override.maxQty
+    return next
+  })
+}
 
 // ─── Local JSON fallback (used when Supabase table doesn't exist) ─────────────
 
@@ -144,13 +183,194 @@ async function blackcatFetch(path, options = {}) {
   return data
 }
 
+function safeBlackcatError(err) {
+  const raw = err?.body || {}
+  const message = raw?.message || raw?.error || err?.message || 'Erro Blackcat'
+  return {
+    status: err?.status || 500,
+    message,
+    messages: raw?.messages || raw?.errors || null,
+  }
+}
+
 function normalizeStatus(s) {
   switch ((s || '').toUpperCase()) {
     case 'PAID':      return 'pago'
+    case 'APPROVED':  return 'pago'
+    case 'AUTHORIZED':return 'pago'
+    case 'COMPLETED': return 'pago'
     case 'PENDING':   return 'aguardando_pagamento'
+    case 'PROCESSING':return 'aguardando_pagamento'
+    case 'REFUSED':   return 'pagamento_recusado'
+    case 'DECLINED':  return 'pagamento_recusado'
+    case 'FAILED':    return 'pagamento_recusado'
     case 'CANCELLED': return 'cancelado'
+    case 'CANCELED':  return 'cancelado'
     case 'REFUNDED':  return 'cancelado'
     default:          return 'aguardando_pagamento'
+  }
+}
+
+function normalizeText(s) {
+  return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+const BR_STATES = {
+  acre: 'AC',
+  alagoas: 'AL',
+  amapa: 'AP',
+  amazonas: 'AM',
+  bahia: 'BA',
+  ceara: 'CE',
+  'distrito federal': 'DF',
+  'espirito santo': 'ES',
+  goias: 'GO',
+  maranhao: 'MA',
+  'mato grosso': 'MT',
+  'mato grosso do sul': 'MS',
+  'minas gerais': 'MG',
+  para: 'PA',
+  paraiba: 'PB',
+  parana: 'PR',
+  pernambuco: 'PE',
+  piaui: 'PI',
+  'rio de janeiro': 'RJ',
+  'rio grande do norte': 'RN',
+  'rio grande do sul': 'RS',
+  rondonia: 'RO',
+  roraima: 'RR',
+  'santa catarina': 'SC',
+  'sao paulo': 'SP',
+  sergipe: 'SE',
+  tocantins: 'TO',
+}
+
+function stateToUf(state) {
+  if (!state) return ''
+  const s = String(state).trim()
+  if (/^[A-Za-z]{2}$/.test(s)) return s.toUpperCase()
+  return BR_STATES[normalizeText(s)] || ''
+}
+
+function onlyDigits(value) {
+  return String(value || '').replace(/\D+/g, '')
+}
+
+function normalizeCreditCard(card = {}) {
+  const number = onlyDigits(card.number)
+  const cvv = onlyDigits(card.cvv)
+  const expMonth = onlyDigits(card.expMonth || card.expirationMonth).padStart(2, '0')
+  const expYearRaw = onlyDigits(card.expYear || card.expirationYear)
+  const expYear = expYearRaw.length === 2 ? `20${expYearRaw}` : expYearRaw
+  const installments = 1
+
+  if (!String(card.holderName || '').trim()) return null
+  if (number.length < 13 || number.length > 19) return null
+  if (cvv.length < 3 || cvv.length > 4) return null
+  if (Number(expMonth) < 1 || Number(expMonth) > 12) return null
+  if (!expYear || Number(expYear) < new Date().getFullYear()) return null
+
+  return {
+    holderName: String(card.holderName).trim(),
+    number,
+    cvv,
+    expirationMonth: expMonth,
+    expirationYear: expYear,
+    installments,
+    last4: number.slice(-4),
+  }
+}
+
+function extractPaymentUrl(data) {
+  return data?.data?.paymentUrl || data?.data?.paymentURL || data?.data?.checkoutUrl || data?.data?.checkoutURL || data?.paymentUrl || data?.checkoutUrl || null
+}
+
+function buildBlackcatCardFields(card, customer = {}) {
+  const document = onlyDigits(customer.cpf)
+  const common = {
+    holderName: card.holderName,
+    holder_name: card.holderName,
+    name: card.holderName,
+    number: card.number,
+    cardNumber: card.number,
+    card_number: card.number,
+    cvv: card.cvv,
+    cvc: card.cvv,
+    cardCvv: card.cvv,
+    card_cvv: card.cvv,
+    expirationMonth: card.expirationMonth,
+    expiration_month: card.expirationMonth,
+    expMonth: card.expirationMonth,
+    exp_month: card.expirationMonth,
+    expirationYear: card.expirationYear,
+    expiration_year: card.expirationYear,
+    expYear: card.expirationYear,
+    exp_year: card.expirationYear,
+    expirationDate: `${card.expirationMonth}/${card.expirationYear}`,
+    expiration_date: `${card.expirationMonth}/${card.expirationYear}`,
+    holder: {
+      name: card.holderName,
+      document,
+    },
+    expiration: {
+      month: card.expirationMonth,
+      year: card.expirationYear,
+    },
+  }
+
+  return common
+}
+
+function buildBlackcatCardSalePayload({ totalCents, customer, address, normalizedItems, card }) {
+  const cardFields = buildBlackcatCardFields(card, customer)
+  const installments = 1
+  const customerPayload = {
+    name: customer.nome || 'Cliente',
+    email: customer.email || 'cliente@depositoparceiro.online',
+    phone: onlyDigits(customer.telefone),
+    document: { number: onlyDigits(customer.cpf), type: 'cpf' },
+  }
+  const itemsPayload = normalizedItems.map(i => ({
+    title: i.nome || i.name || 'Produto',
+    quantity: i.qty || i.qtd || 1,
+    unitPrice: Math.round((i.price || 0) * 100),
+    tangible: false,
+  }))
+
+  return {
+    amount: totalCents,
+    value: totalCents,
+    paymentMethod: 'CREDIT_CARD',
+    method: 'CREDIT_CARD',
+    installments,
+    customer: customerPayload,
+    billing: {
+      name: customerPayload.name,
+      address: {
+        street: address.logradouro || address.street || '',
+        streetNumber: address.numero || address.number || '',
+        neighborhood: address.bairro || address.neighborhood || '',
+        city: address.cidade || address.city || '',
+        state: address.uf || address.state || '',
+        zipCode: onlyDigits(address.cep),
+      },
+    },
+    items: itemsPayload,
+    card: cardFields,
+    creditCard: cardFields,
+    credit_card: cardFields,
+    cardData: cardFields,
+    card_data: cardFields,
+    paymentData: {
+      installments,
+      card: cardFields,
+      creditCard: cardFields,
+    },
+    payment_method: {
+      type: 'CREDIT_CARD',
+      installments,
+      card: cardFields,
+    },
   }
 }
 
@@ -171,41 +391,115 @@ app.post('/api/v1/events', async (req, res) => {
   return res.json({ ok: true })
 })
 
+app.get('/api/v1/products', async (_req, res) => {
+  const cfg = await loadSettingsObject()
+  return res.json({ products: buildProducts(cfg.product_overrides) })
+})
+
+app.get('/api/v1/geocode/reverse', async (req, res) => {
+  const lat = Number(req.query.lat)
+  const lng = Number(req.query.lng)
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return res.status(400).json({ message: 'Coordenadas inválidas.' })
+  }
+
+  try {
+    const url = new URL('https://nominatim.openstreetmap.org/reverse')
+    url.searchParams.set('format', 'jsonv2')
+    url.searchParams.set('lat', String(lat))
+    url.searchParams.set('lon', String(lng))
+    url.searchParams.set('addressdetails', '1')
+    url.searchParams.set('accept-language', 'pt-BR')
+
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'deposito-parceiro-app/1.0 contato@depositomaisbarato.online',
+      },
+    })
+
+    if (!response.ok) return res.status(502).json({ message: 'Localização indisponível.' })
+
+    const data = await response.json()
+    const address = data?.address || {}
+    const city = address.city || address.town || address.village || address.municipality || address.county || ''
+    const state = stateToUf(address.state || address.state_code || '')
+
+    if (!city || !state) return res.status(404).json({ message: 'Não foi possível identificar sua cidade.' })
+
+    return res.json({
+      city,
+      state,
+      latitude: lat,
+      longitude: lng,
+      source: 'browser',
+    })
+  } catch {
+    return res.status(502).json({ message: 'Localização indisponível.' })
+  }
+})
+
 // Create order
 app.post('/api/v1/pedidos', async (req, res) => {
   try {
-    const { items = [], customer = {}, address = {}, notes, total: passedTotal, couponDiscount = 0, session_id } = req.body
+    const { items = [], customer = {}, address = {}, notes, couponDiscount = 0, session_id, payment = {} } = req.body
     if (!items.length) return res.status(400).json({ message: 'Carrinho vazio.' })
 
-    const subtotal   = items.reduce((s, i) => s + ((i.price || 0) * (i.qty || i.qtd || 1)), 0)
-    const totalReais = passedTotal != null ? Number(passedTotal) : Math.max(0, subtotal - couponDiscount)
+    const cfg = await loadSettingsObject()
+    const currentProducts = new Map(buildProducts(cfg.product_overrides).map(product => [product.id, product]))
+    const normalizedItems = items.map(item => {
+      const productId = item.produto_id || item.productId || item.id
+      const product = currentProducts.get(productId)
+      const qty = Number(item.qty || item.qtd || 1)
+      const price = product ? Number(product.price) : Number(item.price || item.preco || 0)
+      return {
+        produto_id: productId,
+        productId,
+        qtd: qty,
+        qty,
+        nome: product?.name || item.nome || item.name || 'Produto',
+        name: product?.name || item.name || item.nome || 'Produto',
+        preco: price,
+        price,
+        image: product?.image || item.image || null,
+      }
+    })
+
+    const subtotal   = normalizedItems.reduce((s, i) => s + ((i.price || 0) * (i.qty || 1)), 0)
+    const totalReais = Math.max(0, subtotal - couponDiscount)
     const totalCents = Math.round(totalReais * 100)
     if (totalCents < 4000) return res.status(400).json({ message: 'Pedido mínimo de R$ 40,00.' })
 
-    // Read pix_mode from settings
-    const { data: settingsRows } = await db.from('settings').select('key, value')
-    const cfg = {}; (settingsRows || []).forEach(r => { cfg[r.key] = r.value })
+    const requestedPaymentMethod = payment?.method === 'credit_card' ? 'credit_card' : 'pix'
+    const creditCardEnabled = cfg.credit_card_enabled !== 'false'
+
+    if (requestedPaymentMethod === 'credit_card' && !creditCardEnabled) {
+      return res.status(400).json({ message: 'Cartão de crédito indisponível no momento.' })
+    }
+
     const pixMode = cfg.pix_mode || 'api'
 
     const orderId = randomUUID()
-    let transactionId, pixCode, pixBase64, paymentMode
+    let transactionId, pixCode, pixBase64, paymentMode, paymentUrl, cardSummary, initialStatus = 'aguardando_pagamento'
 
-    if (pixMode === 'manual') {
+    if (requestedPaymentMethod === 'pix' && pixMode === 'manual') {
       const pixKey  = cfg.pix_manual_key || ''
-      const pixName = cfg.pix_manual_name || cfg.store_name || 'Deposito Parceiro'
+      const pixName = cfg.pix_manual_name || cfg.store_name || 'Deposito Mais Barato'
       const pixCity = (cfg.store_city || 'SAO PAULO').split('·')[0].trim()
       if (!pixKey) return res.status(400).json({ message: 'Chave PIX não configurada. Configure no painel admin.' })
       transactionId = orderId
       pixCode       = buildPixBRCode(pixKey, totalReais, orderId, pixName, pixCity)
       pixBase64     = null
       paymentMode   = 'manual'
-    } else {
+    } else if (requestedPaymentMethod === 'pix') {
       const bcRes = await blackcatFetch('/api/sales/create-sale', {
         method: 'POST',
         body: JSON.stringify({
           amount: totalCents, paymentMethod: 'PIX',
           customer: { name: customer.nome || 'Cliente', email: customer.email || 'cliente@depositoparceiro.online', phone: (customer.telefone || '').replace(/\D/g, ''), document: { number: (customer.cpf || '').replace(/\D/g, ''), type: 'cpf' } },
-          items: items.map(i => ({ title: i.nome || i.name || 'Produto', quantity: i.qty || i.qtd || 1, unitPrice: Math.round((i.price || 0) * 100), tangible: false })),
+          items: normalizedItems.map(i => ({ title: i.nome || i.name || 'Produto', quantity: i.qty || i.qtd || 1, unitPrice: Math.round((i.price || 0) * 100), tangible: false })),
         }),
       })
       transactionId = bcRes?.data?.transactionId || bcRes?.transactionId
@@ -213,15 +507,69 @@ app.post('/api/v1/pedidos', async (req, res) => {
       pixBase64     = bcRes?.data?.paymentData?.qrCodeBase64 || null
       paymentMode   = 'api'
       if (!transactionId) return res.status(502).json({ message: 'Falha ao gerar cobrança PIX.' })
+    } else {
+      if (!BLACKCAT_API_KEY) return res.status(500).json({ message: 'Blackcat não configurada para cartão.' })
+
+      const card = normalizeCreditCard(payment.card)
+      if (!card) return res.status(400).json({ message: 'Dados do cartão inválidos.' })
+
+      let bcRes
+      try {
+        bcRes = await blackcatFetch('/api/sales/create-sale', {
+          method: 'POST',
+          body: JSON.stringify(buildBlackcatCardSalePayload({ totalCents, customer, address, normalizedItems, card })),
+        })
+      } catch (err) {
+        const safeErr = safeBlackcatError(err)
+        console.error('Blackcat credit card sale failed:', JSON.stringify(safeErr))
+        return res.status(safeErr.status >= 400 && safeErr.status < 500 ? 400 : 502).json({
+          message: safeErr.message || 'Falha ao processar pagamento no cartão.',
+        })
+      }
+
+      transactionId = bcRes?.data?.transactionId || bcRes?.transactionId || bcRes?.data?.id || bcRes?.id
+      paymentUrl = extractPaymentUrl(bcRes)
+      paymentMode = 'api'
+      cardSummary = { last4: card.last4, installments: card.installments }
+
+      const normalized = normalizeStatus(bcRes?.data?.status || bcRes?.status)
+      if (normalized === 'pago') initialStatus = 'pago'
+
+      if (!transactionId) {
+        console.error('Blackcat credit card response without transaction id:', JSON.stringify(bcRes))
+        return res.status(502).json({ message: 'Falha ao processar pagamento no cartão.' })
+      }
     }
 
-    const order = { id: orderId, transaction_id: transactionId, status: 'aguardando_pagamento', paid: false, total: totalReais, total_cents: totalCents, customer, address, notes: notes || null, items, payment: { method: 'pix', mode: paymentMode, pix_code: pixCode, pix_base64: pixBase64 } }
+    const order = {
+      id: orderId,
+      transaction_id: transactionId,
+      status: initialStatus,
+      paid: initialStatus === 'pago',
+      total: totalReais,
+      total_cents: totalCents,
+      customer,
+      address,
+      notes: notes || null,
+      items: normalizedItems,
+      payment: {
+        method: requestedPaymentMethod,
+        mode: paymentMode,
+        pix_code: pixCode,
+        pix_base64: pixBase64,
+        payment_url: paymentUrl,
+        card: cardSummary,
+      },
+    }
 
     let { error: dbErr } = await db.from('orders').insert(order)
     if (isTableMissing(dbErr)) { const fb = localOrders.insert(order); dbErr = fb.error }
     if (dbErr) return res.status(500).json({ message: 'Erro ao salvar pedido.' })
 
-    if (session_id) db.from('events').insert({ session_id, event: 'pix_generated', metadata: { order_id: orderId, total: totalReais } }).then(() => {}).catch(() => {})
+    if (session_id) {
+      const event = requestedPaymentMethod === 'credit_card' ? 'card_payment_started' : 'pix_generated'
+      db.from('events').insert({ session_id, event, metadata: { order_id: orderId, total: totalReais } }).then(() => {}).catch(() => {})
+    }
 
     const fmtBRL = v => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
     sendPush({ title: '🛒 Novo pedido!', body: `${customer.nome || 'Cliente'} gerou PIX de ${fmtBRL(totalReais)}`, tag: `order-${orderId}`, url: '/admin' }).catch(() => {})
@@ -285,6 +633,34 @@ app.get('/api/v1/geocode/cep/:cep', async (req, res) => {
 // Storefront
 app.get('/api/v1/storefront/location', (_req, res) => {
   return res.json({ available: true, distanceKm: 2.1, deliveryFee: 0, minOrder: 40, etaMinutes: { min: 20, max: 35 } })
+})
+
+app.get('/api/v1/storefront/settings', async (_req, res) => {
+  const defaults = {
+    store_name: 'Depósito Mais Barato',
+    store_phone: '55 11 94821-9943',
+    store_whatsapp: '5511948219943',
+    store_city: 'Entregas em 30 Min',
+    store_hours: 'Diariamente · Aberto 24 horas',
+    store_cnpj: '01.875.479/0001-72',
+    delivery_min: '40',
+    delivery_fee: '0',
+    delivery_eta_min: '20',
+    delivery_eta_max: '35',
+    credit_card_enabled: 'true',
+  }
+
+  try {
+    const keys = Object.keys(defaults)
+    const { data, error } = await db.from('settings').select('key, value').in('key', keys)
+    if (error) return res.json(defaults)
+
+    const settings = { ...defaults }
+    ;(data || []).forEach(row => { settings[row.key] = row.value })
+    return res.json(settings)
+  } catch {
+    return res.json(defaults)
+  }
 })
 
 // ─── Push Notifications ───────────────────────────────────────────────────────
@@ -412,7 +788,7 @@ app.get('/api/admin/pedidos/:id', requireAdmin, async (req, res) => {
 // Update order status
 app.patch('/api/admin/pedidos/:id/status', requireAdmin, async (req, res) => {
   const { status } = req.body || {}
-  const allowed = ['aguardando_pagamento', 'pago', 'em_preparo', 'em_rota', 'entregue', 'cancelado']
+  const allowed = ['aguardando_pagamento', 'pagamento_recusado', 'pago', 'em_preparo', 'em_rota', 'entregue', 'cancelado']
   if (!allowed.includes(status)) return res.status(400).json({ message: 'Status inválido.' })
   const isPaid = ['pago', 'em_preparo', 'em_rota', 'entregue'].includes(status)
   let { data, error } = await db.from('orders').update({ status, paid: isPaid }).eq('id', req.params.id).select().single()
@@ -429,9 +805,47 @@ app.get('/api/admin/settings', requireAdmin, async (_req, res) => {
   return res.json(obj)
 })
 
+app.get('/api/admin/products', requireAdmin, async (_req, res) => {
+  const cfg = await loadSettingsObject()
+  return res.json({ products: buildProducts(cfg.product_overrides) })
+})
+
+app.patch('/api/admin/products', requireAdmin, async (req, res) => {
+  const incoming = Array.isArray(req.body?.products) ? req.body.products : []
+  const currentById = new Map(PRODUCTS.map(product => [product.id, product]))
+  const overrides = normalizeProductOverrides(
+    incoming
+      .filter(item => currentById.has(item.id))
+      .map(item => ({
+        id: item.id,
+        price: item.price,
+        oldPrice: item.oldPrice,
+        maxQty: item.maxQty,
+      }))
+  )
+
+  if (overrides.length !== PRODUCTS.length) {
+    return res.status(400).json({ message: 'Envie todos os produtos com preços válidos.' })
+  }
+
+  const { error } = await db.from('settings').upsert(
+    { key: 'product_overrides', value: JSON.stringify(overrides) },
+    { onConflict: 'key' }
+  )
+  if (error) return res.status(500).json({ message: error.message })
+
+  return res.json({ products: buildProducts(JSON.stringify(overrides)) })
+})
+
 // Update settings
 app.patch('/api/admin/settings', requireAdmin, async (req, res) => {
   const updates = req.body || {}
+  if (updates.store_whatsapp != null) {
+    updates.store_whatsapp = String(updates.store_whatsapp).replace(/\D+/g, '')
+  }
+  if (updates.store_name != null) {
+    updates.store_name = String(updates.store_name).trim()
+  }
   const rows = Object.entries(updates).map(([key, value]) => ({ key, value: String(value) }))
   if (!rows.length) return res.json({ ok: true })
   const { error } = await db.from('settings').upsert(rows, { onConflict: 'key' })
@@ -447,7 +861,7 @@ export default app
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const PORT = process.env.PORT || 8000
   app.listen(PORT, () => {
-    console.log(`Depósito Parceiro API → http://localhost:${PORT}`)
+    console.log(`Depósito Mais Barato API → http://localhost:${PORT}`)
     console.log(`Supabase: ${SUPABASE_URL ? 'conectado' : 'SEM CONFIGURAÇÃO'}`)
   })
 }

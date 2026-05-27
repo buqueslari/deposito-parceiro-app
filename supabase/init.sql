@@ -1,5 +1,5 @@
 -- ============================================================
--- Depósito Parceiro — Schema completo
+-- Depósito Mais Barato — Schema completo
 -- Cole no Supabase → SQL Editor → Run
 -- ============================================================
 
@@ -46,9 +46,9 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Configurações padrão
 INSERT INTO settings (key, value) VALUES
-  ('store_name',       'Depósito Parceiro'),
-  ('store_phone',      '(11) 3026-6912'),
-  ('store_whatsapp',   '5511930266912'),
+  ('store_name',       'Depósito Mais Barato'),
+  ('store_phone',      '55 11 94821-9943'),
+  ('store_whatsapp',   '5511948219943'),
   ('store_city',       'São Paulo · SP'),
   ('store_hours',      'Diariamente · Aberto 24 horas'),
   ('store_cnpj',       '01.875.479/0001-72'),
@@ -58,7 +58,9 @@ INSERT INTO settings (key, value) VALUES
   ('delivery_eta_max', '35'),
   ('coupon_enabled',   'true'),
   ('coupon_value',     '15'),
-  ('coupon_min_order', '50')
+  ('coupon_min_order', '50'),
+  ('credit_card_enabled','true'),
+  ('product_overrides','[]')
 ON CONFLICT (key) DO NOTHING;
 
 -- Trigger updated_at em orders

@@ -9,16 +9,16 @@
     <link rel="manifest" href="/manifest.json" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="DP Admin" />
-    <meta name="description" content="Depósito Parceiro — entrega de gás de cozinha e água em até 40 minutos. Os melhores preços de São Paulo." />
-    <meta property="og:title" content="Depósito Parceiro" />
+    <meta name="apple-mobile-web-app-title" content="DMB Admin" />
+    <meta name="description" content="Depósito Mais Barato — entrega de gás de cozinha e água em até 40 minutos. Os melhores preços de São Paulo." />
+    <meta property="og:title" content="Depósito Mais Barato" />
     <meta property="og:description" content="Entrega de gás e água em até 40 minutos." />
     <meta property="og:type" content="website" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://www.googletagmanager.com" />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Outfit:wght@600;700;800;900&display=swap" rel="stylesheet" />
-    <title>Depósito Parceiro — Entrega em até 40min</title>
+    <title>Depósito Mais Barato — Entrega em até 40min</title>
     <!-- Google tag (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18181769409"></script>
     <script>
@@ -26,6 +26,29 @@
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
       gtag('config', 'AW-18181769409');
+      function gtag_report_conversion(url) {
+        var called = false;
+        var callback = function () {
+          if (called) return;
+          called = true;
+          if (typeof(url) != 'undefined') {
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }
+        };
+        if (typeof gtag === 'function') {
+          gtag('event', 'conversion', {
+            'send_to': 'AW-18181769409/MaSmCMLY87McEMGR391D',
+            'value': 1.0,
+            'currency': 'BRL',
+            'event_callback': callback,
+            'event_timeout': 1000
+          });
+          setTimeout(callback, 1200);
+        } else {
+          callback();
+        }
+        return false;
+      }
     </script>
   </head>
   <body>

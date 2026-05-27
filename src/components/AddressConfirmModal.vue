@@ -38,7 +38,7 @@
               </svg>
               <div v-if="detecting" class="flex items-center gap-2">
                 <div class="w-3 h-3 rounded-full border-2 border-action border-t-transparent animate-spin"></div>
-                <p class="text-sm text-ink/70">Detectando sua região…</p>
+                <p class="text-sm text-ink/70">Pedindo sua localização…</p>
               </div>
               <p v-else class="text-sm text-ink leading-snug">
                 Você está em <strong>{{ detectedCity }} · {{ detectedState }}</strong>? Confirme seu endereço abaixo.
@@ -146,7 +146,7 @@
             <p class="text-center text-xs font-bold tracking-widest mb-2" style="color:#15803D">UNIDADE ENCONTRADA</p>
 
             <div class="flex items-center justify-center gap-2 mb-1">
-              <h2 class="text-center font-extrabold text-ink text-xl">Depósito Parceiro</h2>
+              <h2 class="text-center font-extrabold text-ink text-xl">Depósito Mais Barato</h2>
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" class="w-5 h-5 shrink-0">
                 <path fill="#00D566" d="M99.5,52.8l-1.9,4.7c-0.6,1.6-0.6,3.3,0,4.9l1.9,4.7c1.1,2.8,0.2,6-2.3,7.8L93,77.8c-1.4,1-2.3,2.5-2.7,4.1l-0.9,5c-0.6,3-3.1,5.2-6.1,5.3l-5.1,0.2c-1.7,0.1-3.3,0.8-4.5,2l-3.5,3.7c-2.1,2.2-5.4,2.7-8,1.2l-4.4-2.6c-1.5-0.9-3.2-1.1-4.9-0.7l-5,1.2c-2.9,0.7-6-0.7-7.4-3.4l-2.3-4.6c-0.8-1.5-2.1-2.7-3.7-3.2l-4.8-1.6c-2.9-1-4.7-3.8-4.4-6.8l0.5-5.1c0.2-1.7-0.3-3.4-1.4-4.7l-3.2-4c-1.9-2.4-1.9-5.7,0-8.1l3.2-4c1.1-1.3,1.6-3,1.4-4.7l-0.5-5.1c-0.3-3,1.5-5.8,4.4-6.8l4.8-1.6c1.6-0.5,2.9-1.7,3.7-3.2l2.3-4.6c1.4-2.7,4.4-4.1,7.4-3.4l5,1.2c1.6,0.4,3.4,0.2,4.9-0.7l4.4-2.6c2.6-1.5,5.9-1.1,8,1.2l3.5,3.7c1.2,1.2,2.8,2,4.5,2l5.1,0.2c3,0.1,5.6,2.3,6.1,5.3l0.9,5c0.3,1.7,1.3,3.2,2.7,4.1l4.2,2.9C99.7,46.8,100.7,50,99.5,52.8z"/>
                 <polyline points="42,62 54,74 78,48" fill="none" stroke="white" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
@@ -192,6 +192,7 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { geocodeApi } from '@/api'
 
 const STORAGE_KEY = 'depositoparceiro:address:v1'
 
@@ -218,7 +219,34 @@ const errors = reactive({ cep: '', numero: '' })
 
 const emit = defineEmits(['confirmed', 'detected'])
 
-// ─── IP geolocation ──────────────────────────────────────────────────────────
+// ─── Geolocation ─────────────────────────────────────────────────────────────
+
+function getBrowserPosition() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation unavailable'))
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: false,
+      timeout: 8000,
+      maximumAge: 10 * 60 * 1000,
+    })
+  })
+}
+
+async function detectLocationByBrowser() {
+  const position = await getBrowserPosition()
+  const { latitude, longitude } = position.coords || {}
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error('Invalid coordinates')
+  }
+
+  const data = await geocodeApi.reverse({ lat: latitude, lng: longitude })
+  if (!data?.city || !data?.state) throw new Error('City not found')
+  return { city: data.city, state: data.state }
+}
 
 async function detectLocationByIp() {
   const apis = [
@@ -242,6 +270,14 @@ async function detectLocationByIp() {
     } catch { /* try next */ }
   }
   return { city: 'São Paulo', state: 'SP' }
+}
+
+async function detectCustomerLocation() {
+  try {
+    return await detectLocationByBrowser()
+  } catch {
+    return await detectLocationByIp()
+  }
 }
 
 const BR_STATES = {
@@ -353,7 +389,7 @@ onMounted(async () => {
 
   setTimeout(() => { visible.value = true }, 300)
 
-  const { city, state } = await detectLocationByIp()
+  const { city, state } = await detectCustomerLocation()
   detectedCity.value  = city
   detectedState.value = state
   form.cidade         = city

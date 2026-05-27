@@ -9,7 +9,7 @@
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
           </svg>
         </div>
-        <h1 class="text-2xl font-extrabold text-white">Depósito Parceiro</h1>
+        <h1 class="text-2xl font-extrabold text-white">Depósito Mais Barato</h1>
         <p class="text-white/60 text-sm mt-1">Painel Administrativo</p>
       </div>
 
@@ -44,7 +44,7 @@
         </form>
       </div>
 
-      <p class="text-center text-white/30 text-xs mt-6">Depósito Parceiro © {{ new Date().getFullYear() }}</p>
+      <p class="text-center text-white/30 text-xs mt-6">Depósito Mais Barato © {{ new Date().getFullYear() }}</p>
     </div>
   </div>
 </template>

@@ -33,7 +33,7 @@
           <div class="flex items-start justify-between px-4 pb-3 flex-shrink-0">
             <div>
               <p class="text-[11px] font-semibold text-ink/45 uppercase tracking-widest">SEU PEDIDO EM</p>
-              <p class="text-lg font-extrabold text-ink leading-tight">Depósito Parceiro</p>
+              <p class="text-lg font-extrabold text-ink leading-tight">{{ settings.store_name }}</p>
             </div>
             <button
               @click="isOpen = false"
@@ -164,6 +164,16 @@
                 <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
               </svg>
             </button>
+
+            <button
+              @click="buyCartOnWhatsApp"
+              class="mt-3 w-full bg-[#008A00] text-white font-bold py-4 rounded-2xl text-base shadow-cta hover:bg-[#007A00] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 32 32" fill="currentColor" aria-hidden="true">
+                <path d="M16.02 3C8.86 3 3.04 8.7 3.04 15.72c0 2.4.68 4.74 1.98 6.76L3 29l6.72-1.96a13.26 13.26 0 0 0 6.3 1.59C23.18 28.63 29 22.93 29 15.9S23.18 3 16.02 3Zm0 23.45c-1.93 0-3.82-.52-5.47-1.5l-.39-.23-3.98 1.16 1.18-3.82-.25-.4a10.46 10.46 0 0 1-1.66-5.94c0-5.82 4.74-10.55 10.57-10.55s10.57 4.73 10.57 10.55-4.74 10.73-10.57 10.73Zm5.8-7.9c-.32-.16-1.88-.91-2.17-1.02-.29-.1-.5-.16-.71.16-.21.31-.82 1.01-1 1.22-.19.2-.37.23-.69.08-.32-.16-1.34-.49-2.56-1.55-.94-.83-1.58-1.86-1.77-2.18-.18-.31-.02-.48.14-.64.14-.14.32-.37.48-.55.16-.19.21-.32.32-.53.1-.2.05-.39-.03-.55-.08-.16-.71-1.68-.98-2.3-.26-.6-.52-.52-.71-.53h-.61c-.21 0-.55.08-.84.39-.29.31-1.1 1.06-1.1 2.58s1.13 3 1.29 3.2c.16.21 2.22 3.33 5.38 4.67.75.32 1.34.51 1.8.65.76.23 1.45.2 1.99.12.61-.09 1.88-.75 2.14-1.48.27-.73.27-1.35.19-1.48-.08-.13-.29-.2-.61-.36Z"/>
+              </svg>
+              Comprar pelo WhatsApp
+            </button>
           </div>
         </div>
       </div>
@@ -172,12 +182,16 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useCartStore } from '@/stores/cart'
+import { useStorefrontSettingsStore } from '@/stores/storefrontSettings'
 import { useRouter } from 'vue-router'
 import { useTracking } from '@/composables/useTracking'
+import { openCartWhatsApp } from '@/lib/whatsapp'
 
 const cart   = useCartStore()
+const storefrontSettings = useStorefrontSettingsStore()
+const settings = computed(() => storefrontSettings.settings)
 const router = useRouter()
 const isOpen = ref(false)
 const { track } = useTracking()
@@ -196,6 +210,11 @@ function goCheckout() {
   track('checkout_started', { total: cart.total, qty: cart.totalQty })
   isOpen.value = false
   router.push('/checkout')
+}
+
+function buyCartOnWhatsApp() {
+  track('whatsapp_buy', { source: 'cart_drawer', total: cart.total, qty: cart.totalQty })
+  openCartWhatsApp(cart)
 }
 </script>
 

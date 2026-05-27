@@ -20,7 +20,7 @@
             </svg>
           </div>
           <div class="min-w-0">
-            <p class="text-white font-extrabold text-sm leading-tight truncate">{{ settings.store_name || 'Depósito Parceiro' }}</p>
+            <p class="text-white font-extrabold text-sm leading-tight truncate">{{ settings.store_name || 'Depósito Mais Barato' }}</p>
             <p class="text-white/50 text-[11px]">Painel Admin</p>
           </div>
         </div>
@@ -269,6 +269,71 @@
           </div>
         </template>
 
+        <!-- ═══ PRODUCTS TAB ═══ -->
+        <template v-else-if="activeTab === 'products'">
+          <div class="space-y-4">
+            <div class="bg-white rounded-2xl border border-black/[0.05] p-5">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 class="font-extrabold text-[#1A1A1A]">Produtos e Preços</h2>
+                  <p class="text-sm text-[#1A1A1A]/40 mt-0.5">Altere os valores exibidos no site e usados nos pedidos</p>
+                </div>
+                <button
+                  @click="saveProducts"
+                  :disabled="savingProducts || productsLoading"
+                  class="bg-[#0057B7] text-white font-bold py-3 px-5 rounded-xl text-sm hover:bg-[#0046a0] active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  <svg v-if="savingProducts" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+                  {{ savingProducts ? 'Salvando...' : 'Salvar preços' }}
+                </button>
+              </div>
+
+              <div v-if="productsLoading" class="flex justify-center py-16">
+                <svg class="w-7 h-7 text-[#0057B7] animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" stroke-opacity="0.3"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+              </div>
+
+              <div v-else class="space-y-6">
+                <section v-for="cat in productCategories" :key="cat.id">
+                  <h3 class="text-[11px] font-bold text-[#1A1A1A]/40 uppercase tracking-widest mb-2">{{ cat.name }}</h3>
+                  <div class="rounded-2xl border border-black/[0.06] overflow-hidden">
+                    <div
+                      v-for="product in productsByAdminCategory[cat.id] || []"
+                      :key="product.id"
+                      class="grid grid-cols-1 lg:grid-cols-[1fr_120px_120px_90px] gap-3 px-4 py-3 border-b border-black/[0.04] last:border-0"
+                    >
+                      <div class="flex items-center gap-3 min-w-0">
+                        <img :src="product.image" :alt="product.name" class="w-12 h-12 rounded-xl object-cover bg-black/5 flex-shrink-0" />
+                        <div class="min-w-0">
+                          <p class="text-sm font-bold text-[#1A1A1A] leading-tight truncate">{{ product.name }}</p>
+                          <p class="text-xs text-[#1A1A1A]/40 truncate">{{ product.id }}</p>
+                        </div>
+                      </div>
+                      <label class="block">
+                        <span class="text-[10px] font-bold text-[#1A1A1A]/35 uppercase tracking-widest block mb-1">Preço</span>
+                        <input v-model.number="product.price" type="number" min="0" step="0.01" class="input-field" />
+                      </label>
+                      <label class="block">
+                        <span class="text-[10px] font-bold text-[#1A1A1A]/35 uppercase tracking-widest block mb-1">Preço antigo</span>
+                        <input v-model.number="product.oldPrice" type="number" min="0" step="0.01" class="input-field" placeholder="Opcional" />
+                      </label>
+                      <label class="block">
+                        <span class="text-[10px] font-bold text-[#1A1A1A]/35 uppercase tracking-widest block mb-1">Limite</span>
+                        <input v-model.number="product.maxQty" type="number" min="1" step="1" class="input-field" placeholder="99" />
+                      </label>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <p v-if="productsSaved" class="text-sm font-bold text-[#15803D] flex items-center gap-1.5 mt-4">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Preços salvos no servidor.
+              </p>
+              <p v-if="productsError" class="text-sm font-bold text-red-500 mt-4">{{ productsError }}</p>
+            </div>
+          </div>
+        </template>
+
         <!-- ═══ SETTINGS TAB ═══ -->
         <template v-else-if="activeTab === 'settings'">
           <div class="max-w-2xl space-y-4">
@@ -278,16 +343,16 @@
               <div class="space-y-3">
                 <div>
                   <label class="text-[11px] font-bold text-[#1A1A1A]/40 uppercase tracking-widest block mb-1.5">Nome da Loja</label>
-                  <input v-model="settingsForm.store_name" type="text" class="input-field" placeholder="Depósito Parceiro" />
+                  <input v-model="settingsForm.store_name" type="text" class="input-field" placeholder="Depósito Mais Barato" />
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                   <div>
                     <label class="text-[11px] font-bold text-[#1A1A1A]/40 uppercase tracking-widest block mb-1.5">Telefone exibido</label>
-                    <input v-model="settingsForm.store_phone" type="text" class="input-field" placeholder="(11) 3026-6912" />
+                    <input v-model="settingsForm.store_phone" type="text" class="input-field" placeholder="55 11 94821-9943" />
                   </div>
                   <div>
                     <label class="text-[11px] font-bold text-[#1A1A1A]/40 uppercase tracking-widest block mb-1.5">WhatsApp (só números)</label>
-                    <input v-model="settingsForm.store_whatsapp" type="text" class="input-field" placeholder="5511930266912" />
+                    <input v-model="settingsForm.store_whatsapp" type="text" class="input-field" placeholder="5511948219943" />
                   </div>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
@@ -425,6 +490,32 @@
               </div>
             </div>
 
+            <div class="bg-white rounded-2xl border border-black/[0.05] p-5">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <h2 class="font-extrabold text-[#1A1A1A] mb-1">Cartao de credito</h2>
+                  <p class="text-sm text-[#1A1A1A]/40">Ative ou desative a opcao de cartao no checkout</p>
+                </div>
+                <button
+                  @click="creditCardEnabled = !creditCardEnabled"
+                  type="button"
+                  class="relative w-12 h-7 rounded-full transition-colors flex-shrink-0"
+                  :class="creditCardEnabled ? 'bg-[#15803D]' : 'bg-black/20'"
+                  :aria-pressed="creditCardEnabled"
+                >
+                  <span
+                    class="absolute top-1 left-0 w-5 h-5 rounded-full bg-white shadow transition-transform"
+                    :class="creditCardEnabled ? 'translate-x-6' : 'translate-x-1'"
+                  />
+                </button>
+              </div>
+              <div class="mt-4 rounded-xl border px-4 py-3" :class="creditCardEnabled ? 'bg-green-50 border-green-100' : 'bg-black/[0.03] border-black/[0.06]'">
+                <p class="text-xs font-semibold" :class="creditCardEnabled ? 'text-green-700' : 'text-[#1A1A1A]/45'">
+                  {{ creditCardEnabled ? 'Cartao ativo no site usando API Blackcat.' : 'Cartao oculto no checkout. O cliente vera apenas Pix.' }}
+                </p>
+              </div>
+            </div>
+
             <div class="flex items-center gap-3">
               <button
                 @click="saveSettings"
@@ -557,8 +648,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { CATEGORIES } from '@/data/products'
+import { useStorefrontSettingsStore } from '@/stores/storefrontSettings'
 
 const router = useRouter()
+const storefrontSettings = useStorefrontSettingsStore()
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -581,8 +675,14 @@ const settings       = ref({})
 const settingsForm   = ref({})
 const savingSettings = ref(false)
 const settingsSaved  = ref(false)
+const adminProducts  = ref([])
+const productsLoading = ref(false)
+const savingProducts = ref(false)
+const productsSaved  = ref(false)
+const productsError  = ref('')
 const couponEnabled  = ref(true)
 const pixMode        = ref('api')
+const creditCardEnabled = ref(true)
 const pushStatus     = ref('idle') // idle | subscribed | unsupported
 const pushLoading    = ref(false)
 const pushError      = ref('')
@@ -594,6 +694,7 @@ let searchTimeout = null
 const NAV = [
   { id: 'dashboard', label: 'Dashboard',   icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>' },
   { id: 'orders',    label: 'Pedidos',     icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>' },
+  { id: 'products',  label: 'Produtos',    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>' },
   { id: 'settings',  label: 'Configurações', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' },
 ]
 
@@ -604,6 +705,7 @@ const FILTERS = [
   { label: '📦 Preparo', value: 'em_preparo' },
   { label: '🏍 Rota',  value: 'em_rota' },
   { label: '✅ Entregue', value: 'entregue' },
+  { label: 'Recusado', value: 'pagamento_recusado' },
   { label: '✕ Cancelado', value: 'cancelado' },
 ]
 
@@ -613,12 +715,21 @@ const STATUS_OPTIONS = [
   { label: 'Em preparo',     value: 'em_preparo' },
   { label: 'A caminho',      value: 'em_rota' },
   { label: 'Entregue',       value: 'entregue' },
+  { label: 'Pagamento recusado', value: 'pagamento_recusado' },
   { label: 'Cancelado',      value: 'cancelado' },
 ]
 
 // ─── Computed ────────────────────────────────────────────────────────────────
 
 const currentTab = computed(() => NAV.find(n => n.id === activeTab.value))
+const productCategories = computed(() => CATEGORIES.filter(cat => adminProducts.value.some(product => product.categoryId === cat.id)))
+const productsByAdminCategory = computed(() => {
+  return adminProducts.value.reduce((acc, product) => {
+    if (!acc[product.categoryId]) acc[product.categoryId] = []
+    acc[product.categoryId].push(product)
+    return acc
+  }, {})
+})
 
 const funnelSteps = computed(() => {
   const u = stats.value?.uniqueFunnel || {}
@@ -736,17 +847,62 @@ async function loadSettings() {
       settingsForm.value  = { ...settings.value }
       couponEnabled.value = settings.value.coupon_enabled !== 'false'
       pixMode.value       = settings.value.pix_mode || 'api'
+      creditCardEnabled.value = settings.value.credit_card_enabled !== 'false'
+      storefrontSettings.setFromAdmin(settings.value)
     }
   } catch { /* ignore */ }
+}
+
+async function loadAdminProducts() {
+  productsLoading.value = true
+  productsError.value = ''
+  try {
+    const res = await fetch('/api/admin/products', { headers: authHeaders() })
+    if (res.status === 401) { logout(); return }
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.message || 'Erro ao carregar produtos.')
+    adminProducts.value = (data.products || []).map(product => ({ ...product }))
+  } catch (e) {
+    productsError.value = e.message || 'Erro ao carregar produtos.'
+  } finally {
+    productsLoading.value = false
+  }
+}
+
+async function saveProducts() {
+  savingProducts.value = true
+  productsSaved.value = false
+  productsError.value = ''
+  try {
+    const payload = {
+      products: adminProducts.value.map(product => ({
+        id: product.id,
+        price: Number(product.price),
+        oldPrice: product.oldPrice === '' || product.oldPrice == null ? null : Number(product.oldPrice),
+        maxQty: product.maxQty === '' || product.maxQty == null ? undefined : Number(product.maxQty),
+      })),
+    }
+    const res = await fetch('/api/admin/products', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(payload) })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.message || 'Erro ao salvar produtos.')
+    adminProducts.value = (data.products || []).map(product => ({ ...product }))
+    productsSaved.value = true
+    setTimeout(() => { productsSaved.value = false }, 3000)
+  } catch (e) {
+    productsError.value = e.message || 'Erro ao salvar produtos.'
+  } finally {
+    savingProducts.value = false
+  }
 }
 
 async function saveSettings() {
   savingSettings.value = true
   try {
-    const payload = { ...settingsForm.value, coupon_enabled: String(couponEnabled.value), pix_mode: pixMode.value }
+    const payload = { ...settingsForm.value, coupon_enabled: String(couponEnabled.value), pix_mode: pixMode.value, credit_card_enabled: String(creditCardEnabled.value) }
     const res = await fetch('/api/admin/settings', { method: 'PATCH', headers: authHeaders(), body: JSON.stringify(payload) })
     if (res.ok) {
       settings.value = { ...payload }
+      storefrontSettings.setFromAdmin(payload)
       settingsSaved.value = true
       setTimeout(() => { settingsSaved.value = false }, 3000)
     }
@@ -781,7 +937,10 @@ function debouncedSearch() {
 
 async function refresh() {
   refreshing.value = true
-  await Promise.all([loadStats(), activeTab.value === 'orders' ? loadOrders() : loadRecentOrders()])
+  await Promise.all([
+    loadStats(),
+    activeTab.value === 'orders' ? loadOrders() : activeTab.value === 'products' ? loadAdminProducts() : loadRecentOrders(),
+  ])
   refreshing.value = false
 }
 
@@ -794,23 +953,24 @@ function formatTime(iso) { return new Date(iso).toLocaleTimeString('pt-BR', { ho
 function formatDate(iso) { return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
 
 function statusLabel(s) {
-  return { aguardando_pagamento: 'Aguardando PIX', pago: 'Pago', em_preparo: 'Em preparo', em_rota: 'A caminho', entregue: 'Entregue', cancelado: 'Cancelado' }[s] || s
+  return { aguardando_pagamento: 'Aguardando pagamento', pagamento_recusado: 'Pagamento recusado', pago: 'Pago', em_preparo: 'Em preparo', em_rota: 'A caminho', entregue: 'Entregue', cancelado: 'Cancelado' }[s] || s
 }
 
 function statusClass(s) {
-  return { aguardando_pagamento: 'bg-amber-100 text-amber-700', pago: 'bg-[#0057B7]/10 text-[#0057B7]', em_preparo: 'bg-purple-100 text-purple-700', em_rota: 'bg-blue-100 text-blue-700', entregue: 'bg-[#15803D]/10 text-[#15803D]', cancelado: 'bg-red-100 text-red-600' }[s] || 'bg-gray-100 text-gray-600'
+  return { aguardando_pagamento: 'bg-amber-100 text-amber-700', pagamento_recusado: 'bg-red-100 text-red-600', pago: 'bg-[#0057B7]/10 text-[#0057B7]', em_preparo: 'bg-purple-100 text-purple-700', em_rota: 'bg-blue-100 text-blue-700', entregue: 'bg-[#15803D]/10 text-[#15803D]', cancelado: 'bg-red-100 text-red-600' }[s] || 'bg-gray-100 text-gray-600'
 }
 
 watch(activeTab, (tab) => {
   if (tab === 'orders') loadOrders()
   if (tab === 'settings') loadSettings()
+  if (tab === 'products') loadAdminProducts()
 })
 
 let pollInterval = null
 
 onMounted(async () => {
   if (!token()) { router.push('/admin/login'); return }
-  await Promise.all([loadStats(), loadRecentOrders(), loadSettings()])
+  await Promise.all([loadStats(), loadRecentOrders(), loadSettings(), loadAdminProducts()])
   pollInterval = setInterval(() => { loadStats(); if (activeTab.value === 'orders') loadOrders(); else loadRecentOrders() }, 30_000)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then(() => checkPushStatus()).catch(() => {})

@@ -47,6 +47,10 @@ export const geocodeApi = {
     const q = new URLSearchParams({ city, uf, street })
     return request(`/geocode/cep/${encodeURIComponent(cep)}?${q}`)
   },
+  reverse({ lat, lng }) {
+    const q = new URLSearchParams({ lat: String(lat), lng: String(lng) })
+    return request(`/geocode/reverse?${q}`)
+  },
 }
 
 export const storefrontApi = {
